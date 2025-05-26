@@ -5,7 +5,10 @@
 // @version      1.0
 // @description  הכנסת פרטי התחברות אוטומטית לבנק הפועלים
 // @match        https://login.bankhapoalim.co.il/ng-portals/auth/he/*
+// @updateURL    https://srulikenig.github.io/ydf/poalim.js
+// @downloadURL  https://srulikenig.github.io/ydf/poalim.js
 // @grant        none
+
 // ==/UserScript==
 
 (function () {
