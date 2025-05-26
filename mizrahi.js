@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         מזרחי טפחות אוטומטי
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  התחברות אוטומטית למזרחי טפחות עם פרמטר ydf מוצפן
 // @match        https://www.mizrahi-tefahot.co.il/login/*
 // @updateURL    https://srulikenig.github.io/ydf/mizrahi.js
@@ -12,6 +12,7 @@
 (function () {
     'use strict';
 
+    //test upodate
     const key = "mySecretKey"; // אותו מפתח כמו באקסל
 
     const hash = window.location.hash;
