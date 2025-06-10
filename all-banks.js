@@ -1,41 +1,33 @@
 // ==UserScript==
-// @name         התחברות אוטומטית - כל הבנקים
+// @name         ydf Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  התחברות אוטומטית לכל הבנקים הנתמכים עם פרמטר ydf מוצפן
-// @match        https://login.bankleumi.co.il/ng-portals/auth/he/*
-// @match        https://hb2.bankleumi.co.il/Banks/Online/HB/LoginPeulotA.asp*
-// @match        https://online.fibi.co.il/*
-// @match        https://online.pagi.co.il/MatafLoginService/MatafLoginServlet*
-// @match        https://biz2.bankhapoalim.co.il/ng-portals/auth/he/biz-login/authenticate*
+// @version      1.4
+// @description  התחברות אוטומטית לכל הבנקים (מרכנתיל, פועלים, פאג"י, מזרחי) עם ydf מוצפן
+// @match        https://start.telebank.co.il/login/*
 // @match        https://login.bankhapoalim.co.il/ng-portals/auth/he/*
-// @updateURL    https://srulikenig.github.io/ydf/all-banks.user.js
-// @downloadURL  https://srulikenig.github.io/ydf/all-banks.user.js
+// @match        https://biz2.bankhapoalim.co.il/ng-portals/auth/he/biz-login/authenticate*
+// @match        https://online.pagi.co.il/MatafLoginService/MatafLoginServlet*
+// @match        https://www.mizrahi-tefahot.co.il/login/*
+// @match        https://hb2.bankleumi.co.il/staticcontent/gate-keeper/he/*
+// @updateURL    https://srulikenig.github.io/ydf/all-banks.js
+// @downloadURL  https://srulikenig.github.io/ydf/all-banks.js
 // @grant        none
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    const key = "mySecretKey";
+    const key = "mySecretKey"; // אותו מפתח כמו באקסל
 
-    const locationHref = window.location.href;
-
-    const extractYDF = () => {
-        if (window.location.hash.includes('ydf=')) {
-            return new URLSearchParams(window.location.hash.split('#')[1]).get("ydf");
-        } else {
-            return new URLSearchParams(window.location.search).get("ydf");
-        }
-    };
-
-    const base64UrlDecode = (str) => {
+    // עוזר: פענוח base64-url
+    function base64UrlDecode(str) {
         str = str.replace(/-/g, '+').replace(/_/g, '/');
         while (str.length % 4) str += '=';
         return atob(str);
-    };
+    }
 
-    const xorDecrypt = (text, key) => {
+    // עוזר: XOR פענוח
+    function xorDecrypt(text, key) {
         let result = '';
         for (let i = 0; i < text.length; i++) {
             result += String.fromCharCode(
@@ -43,38 +35,116 @@
             );
         }
         return result;
-    };
+    }
 
-    const waitForElement = (selector) => new Promise((resolve) => {
-        const interval = setInterval(() => {
-            const el = document.querySelector(selector);
-            if (el) {
-                clearInterval(interval);
-                resolve(el);
-            }
-        }, 100);
-    });
+    // עוזר: המתנה לאלמנט
+    function waitForElement(selector) {
+        return new Promise((resolve) => {
+            const interval = setInterval(() => {
+                const el = document.querySelector(selector);
+                if (el) {
+                    clearInterval(interval);
+                    resolve(el);
+                }
+            }, 100);
+        });
+    }
 
-    const ydf = extractYDF();
-    if (!ydf) return;
+    // עוזר: שליפת ydf מה-URL (search או hash)
+    function getYdfParam({ preferHash = false } = {}) {
+        let ydf = null;
+        if (preferHash) {
+            const hash = window.location.hash;
+            const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+            const params = new URLSearchParams(queryString);
+            ydf = params.get("ydf");
+        } else {
+            const params = new URLSearchParams(window.location.search);
+            ydf = params.get("ydf");
+        }
+        // fallback: נסה גם ב-hash אם לא נמצא
+        if (!ydf) {
+            const hash = window.location.hash;
+            const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+            const params = new URLSearchParams(queryString);
+            ydf = params.get("ydf");
+        }
+        // fallback: נסה גם ב-hash אחרי #
+        if (!ydf) {
+            const hash = window.location.hash;
+            const queryString = hash.includes('#') ? hash.split('#')[1] : '';
+            const params = new URLSearchParams(queryString);
+            ydf = params.get("ydf");
+        }
+        return ydf;
+    }
 
-    let userData;
-    try {
-        const decrypted = xorDecrypt(base64UrlDecode(ydf), key);
-        userData = JSON.parse(decrypted);
-    } catch (e) {
-        console.error("שגיאה בפענוח:", e);
+    const sleep = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
+
+     function setReactInputValue(element, value) {
+         // שלב א': משיגים את ה-'setter' של הערך מהפרוטוטייפ של שדה קלט
+         const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+
+         // שלב ב': מפעילים את ה-'setter' על האלמנט עם הערך החדש
+         valueSetter.call(element, value);
+
+         // שלב ג': יוצרים ומפעילים אירוע 'input' כדי שהאתר (React) יגיב לשינוי
+         const event = new Event('input', { bubbles: true });
+         element.dispatchEvent(event);
+     }
+
+    // --- מרכנתיל עסקי ---
+    if (location.hostname === "start.telebank.co.il" && location.href.includes('LOGIN_PAGE_SME')) {
+        const ydf = getYdfParam({ preferHash: true });
+        if (!ydf) return;
+
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("שגיאה בפענוח:", e);
+            return;
+        }
+        const { password, zheut } = userData;
+
+        (async () => {
+            const idInput = await waitForElement('#tzId');
+            const passInput = await waitForElement('#tzPassword');
+
+            idInput.value = zheut;
+            idInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            passInput.value = password;
+            passInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
+                .find(el => el.innerText.trim() === 'כניסה');
+            if (submitBtn) submitBtn.click();
+        })();
         return;
     }
 
-    const { userName, password, zheut } = userData;
+    // --- מרכנתיל רגיל ---
+    if (location.hostname === "start.telebank.co.il") {
+        const ydf = getYdfParam();
+        if (!ydf) return;
 
-    (async () => {
-        // פאג"י
-        if (locationHref.includes("pagi.co.il")) {
-            const userInput = await waitForElement('#username');
-            const passInput = await waitForElement('#password');
-            const loginBtn = await waitForElement('#continueBtn');
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("שגיאה בפענוח:", e);
+            return;
+        }
+        const { userName, password, zheut } = userData;
+
+        (async () => {
+            const idInput = await waitForElement('#tzId');
+            const userInput = await waitForElement('#aidnum');
+            const passInput = await waitForElement('#tzPassword');
+
+            idInput.value = zheut;
+            idInput.dispatchEvent(new Event('input', { bubbles: true }));
 
             userInput.value = userName;
             userInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -82,11 +152,59 @@
             passInput.value = password;
             passInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-            loginBtn.click();
-        }
+            const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
+                .find(el => el.innerText.trim() === 'כניסה');
+            if (submitBtn) submitBtn.click();
+        })();
+        return;
+    }
 
-        // פועלים עסקים
-        else if (locationHref.includes("biz2.bankhapoalim.co.il")) {
+    // --- פועלים רגיל ---
+    if (location.hostname === "login.bankhapoalim.co.il") {
+        const ydf = getYdfParam();
+        if (!ydf) return;
+
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("Failed to parse user data:", e);
+            return;
+        }
+        const { userName, password } = userData;
+
+        (async () => {
+            const userCodeInput = await waitForElement('#userCode');
+            const passwordInput = await waitForElement('#password');
+
+            userCodeInput.value = userName;
+            userCodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            passwordInput.value = password;
+            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
+                .find(el => el.innerText.trim() === 'כניסה');
+            if (submitBtn) submitBtn.click();
+        })();
+        return;
+    }
+
+    // --- פועלים עסקים ---
+    if (location.hostname === "biz2.bankhapoalim.co.il") {
+        const ydf = getYdfParam({ preferHash: true });
+        if (!ydf) return;
+
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("שגיאה בפענוח המידע:", e);
+            return;
+        }
+        const { userName, password } = userData;
+
+        (async () => {
             const userInput = await waitForElement('#user-code');
             const passInput = await waitForElement('#password');
 
@@ -98,59 +216,29 @@
 
             const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
                 .find(el => el.innerText.trim() === 'כניסה');
-
             if (submitBtn) submitBtn.click();
+        })();
+        return;
+    }
+
+    // --- פאג"י ---
+    if (location.hostname === "online.pagi.co.il") {
+        const ydf = getYdfParam({ preferHash: true });
+        if (!ydf) return;
+
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("שגיאה בפענוח:", e);
+            return;
         }
+        const { userName, password } = userData;
 
-        // פועלים רגיל
-        else if (locationHref.includes("login.bankhapoalim.co.il")) {
-            const userInput = await waitForElement('#userCode');
-            const passInput = await waitForElement('#password');
-
-            userInput.value = userName;
-            userInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-            passInput.value = password;
-            passInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-            const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
-                .find(el => el.innerText.trim() === 'כניסה');
-
-            if (submitBtn) submitBtn.click();
-        }
-
-        // לאומי (מערכת חדשה)
-        else if (locationHref.includes("login.bankleumi.co.il")) {
-            const userInput = await waitForElement('#userCode');
-            const passInput = await waitForElement('#password');
-
-            userInput.value = userName;
-            userInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-            passInput.value = password;
-            passInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-            const btn = Array.from(document.querySelectorAll('button[type="submit"]'))
-                .find(el => el.innerText.includes("כניסה"));
-            if (btn) btn.click();
-        }
-
-        // לאומי (מערכת ישנה)
-        else if (locationHref.includes("hb2.bankleumi.co.il")) {
-            const userInput = await waitForElement('input[name="uid"]');
-            const passInput = await waitForElement('input[name="password"]');
-
-            userInput.value = userName;
-            passInput.value = password;
-
-            const form = document.querySelector('form[name="loginForm"]');
-            if (form) form.submit();
-        }
-
-        // הבינלאומי
-        else if (locationHref.includes("online.fibi.co.il")) {
+        (async () => {
             const userInput = await waitForElement('#username');
             const passInput = await waitForElement('#password');
+            const loginBtn = await waitForElement('#continueBtn');
 
             userInput.value = userName;
             userInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -158,9 +246,72 @@
             passInput.value = password;
             passInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-            const btn = document.querySelector('button[type="submit"]');
-            if (btn) btn.click();
-        }
+            loginBtn.click();
+        })();
+        return;
+    }
 
-    })();
+    // --- מזרחי טפחות ---
+    if (location.hostname === "www.mizrahi-tefahot.co.il") {
+        const ydf = getYdfParam({ preferHash: true });
+        if (!ydf) return;
+
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("שגיאה בפענוח:", e);
+            return;
+        }
+        const { userName, password } = userData;
+
+        (async () => {
+            const userInput = await waitForElement('#emailDesktopHeb');
+            const passInput = await waitForElement('#passwordIDDesktopHEB');
+
+            userInput.value = userName;
+            userInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            passInput.value = password;
+            passInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            const submitBtn = Array.from(document.querySelectorAll('button'))
+                .find(el => el.innerText.trim() === 'כניסה');
+            if (submitBtn) submitBtn.click();
+        })();
+        return;
+    }
+
+    // בנק לאומי
+    if (location.hostname === "hb2.bankleumi.co.il") {
+        const ydf = getYdfParam({ preferHash: true });
+        if (!ydf) return;
+
+        let userData;
+        try {
+            userData = JSON.parse(xorDecrypt(base64UrlDecode(ydf), key));
+        } catch (e) {
+            console.error("שגיאה בפענוח:", e);
+            return;
+        }
+        const { userName, password } = userData;
+
+        (async () => {
+            await sleep(2);
+
+            const userInput = await waitForElement('input[name="user"]');
+            const passInput = await waitForElement('input[name="password"]');
+
+            const submitButton = await waitForElement('button[type="submit"]');
+            setReactInputValue(userInput, userName);
+            setReactInputValue(passInput, password);
+
+            await sleep(2);
+
+            submitButton.click();
+
+        })();
+        return;
+    }
+
 })();
