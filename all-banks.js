@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ydf Auto Login
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  התחברות אוטומטית לכל הבנקים (מרכנתיל, פועלים, פאג"י, מזרחי) עם ydf מוצפן
 // @match        https://start.telebank.co.il/login/*
 // @match        https://login.bankhapoalim.co.il/ng-portals/auth/he/*
@@ -79,19 +79,31 @@
         return ydf;
     }
 
+    function getBankParam(){
+        const hash = window.location.hash; // לדוגמה: "#/LOGIN_PAGE?bank=m&ydf=..."
+
+        const queryString = hash.split('?')[1]; // נחפש את החלק שאחרי סימן השאלה
+        const params = new URLSearchParams(queryString);
+
+        const bank = params.get('bank');
+        return bank
+
+
+    }
+
     const sleep = (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
-     function setReactInputValue(element, value) {
-         // שלב א': משיגים את ה-'setter' של הערך מהפרוטוטייפ של שדה קלט
-         const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    function setReactInputValue(element, value) {
+        // שלב א': משיגים את ה-'setter' של הערך מהפרוטוטייפ של שדה קלט
+        const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
 
-         // שלב ב': מפעילים את ה-'setter' על האלמנט עם הערך החדש
-         valueSetter.call(element, value);
+        // שלב ב': מפעילים את ה-'setter' על האלמנט עם הערך החדש
+        valueSetter.call(element, value);
 
-         // שלב ג': יוצרים ומפעילים אירוע 'input' כדי שהאתר (React) יגיב לשינוי
-         const event = new Event('input', { bubbles: true });
-         element.dispatchEvent(event);
-     }
+        // שלב ג': יוצרים ומפעילים אירוע 'input' כדי שהאתר (React) יגיב לשינוי
+        const event = new Event('input', { bubbles: true });
+        element.dispatchEvent(event);
+    }
 
     // --- מרכנתיל עסקי ---
     if (location.hostname === "start.telebank.co.il" && location.href.includes('LOGIN_PAGE_SME')) {
@@ -108,6 +120,29 @@
         const { password, zheut } = userData;
 
         (async () => {
+
+
+            const alreadyOpened = sessionStorage.getItem("mercantileOpened");
+
+            if (!alreadyOpened) {
+
+                const bank = getBankParam();
+
+                // פתיחה חד־פעמית בכל טעינה חדשה של העמוד
+                sessionStorage.setItem("mercantileOpened", "true");
+
+                // פתח את מרכנתיל בכרטיסיה חדשה
+                window.open("https://start.telebank.co.il/login/?multilang=he&bank="+bank+"&t=s", "_blank");
+
+                // רענון הלשונית הנוכחית
+                setTimeout(() => {
+                    location.reload();
+                }, 5000);
+
+                return;
+            }
+
+
             const idInput = await waitForElement('#tzId');
             const passInput = await waitForElement('#tzPassword');
 
@@ -118,7 +153,7 @@
             passInput.dispatchEvent(new Event('input', { bubbles: true }));
 
             const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
-                .find(el => el.innerText.trim() === 'כניסה');
+            .find(el => el.innerText.trim() === 'כניסה');
             if (submitBtn) submitBtn.click();
         })();
         return;
@@ -139,6 +174,25 @@
         const { userName, password, zheut } = userData;
 
         (async () => {
+
+            const alreadyOpened = sessionStorage.getItem("mercantileOpened");
+
+            if (!alreadyOpened) {
+                const bank = getBankParam();
+                // פתיחה חד־פעמית בכל טעינה חדשה של העמוד
+                sessionStorage.setItem("mercantileOpened", "true");
+
+                // פתח את מרכנתיל בכרטיסיה חדשה
+                window.open("https://start.telebank.co.il/login/?multilang=he&bank="+bank+"&t=p", "_blank");
+                console.log("https://start.telebank.co.il/login/?multilang=he&bank="+bank+"&t=p")
+
+                // רענון הלשונית הנוכחית
+                setTimeout(() => {
+                    location.reload();
+                }, 5000);
+
+                return;
+            }
             const idInput = await waitForElement('#tzId');
             const userInput = await waitForElement('#aidnum');
             const passInput = await waitForElement('#tzPassword');
@@ -153,7 +207,7 @@
             passInput.dispatchEvent(new Event('input', { bubbles: true }));
 
             const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
-                .find(el => el.innerText.trim() === 'כניסה');
+            .find(el => el.innerText.trim() === 'כניסה');
             if (submitBtn) submitBtn.click();
         })();
         return;
@@ -184,7 +238,7 @@
             passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
 
             const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
-                .find(el => el.innerText.trim() === 'כניסה');
+            .find(el => el.innerText.trim() === 'כניסה');
             if (submitBtn) submitBtn.click();
         })();
         return;
@@ -215,7 +269,7 @@
             passInput.dispatchEvent(new Event('input', { bubbles: true }));
 
             const submitBtn = Array.from(document.querySelectorAll('button[type="submit"]'))
-                .find(el => el.innerText.trim() === 'כניסה');
+            .find(el => el.innerText.trim() === 'כניסה');
             if (submitBtn) submitBtn.click();
         })();
         return;
@@ -276,7 +330,7 @@
             passInput.dispatchEvent(new Event('input', { bubbles: true }));
 
             const submitBtn = Array.from(document.querySelectorAll('button'))
-                .find(el => el.innerText.trim() === 'כניסה');
+            .find(el => el.innerText.trim() === 'כניסה');
             if (submitBtn) submitBtn.click();
         })();
         return;
